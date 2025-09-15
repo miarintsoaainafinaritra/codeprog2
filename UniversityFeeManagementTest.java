@@ -1,249 +1,42 @@
 import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Arrays;
+import java.util.List;
 
-enum FeeStatus {
-    IN_PROGRESS, PAID, LATE, NULL, OVERPAID
-}
-
-abstract class Payment {
-    protected int id;
-    protected double amount;
-    protected Instant paymentDateTime;
-    
-    public Payment(int id, double amount, Instant paymentDateTime) {
-        this.id = id;
-        this.amount = amount;
-        this.paymentDateTime = paymentDateTime;
-    }
-    
-    public int getId() { return id; }
-    public double getAmount() { return amount; }
-    public Instant getPaymentDateTime() { return paymentDateTime; }
-}
-
-class CashPayment extends Payment {
-    public CashPayment(int id, double amount, Instant paymentDateTime) {
-        super(id, amount, paymentDateTime);
-    }
-}
-
-class CreditCardPayment extends Payment {
-    private String cardNumber;
-    
-    public CreditCardPayment(int id, double amount, Instant paymentDateTime, String cardNumber) {
-        super(id, amount, paymentDateTime);
-        this.cardNumber = cardNumber;
-    }
-    
-    public String getCardNumber() { return cardNumber; }
-}
-
-class BankTransferPayment extends Payment {
-    private String bankAccount;
-    
-    public BankTransferPayment(int id, double amount, Instant paymentDateTime, String bankAccount) {
-        super(id, amount, paymentDateTime);
-        this.bankAccount = bankAccount;
-    }
-    
-    public String getBankAccount() { return bankAccount; }
-}
-
-class Group {
-    private int id;
-    private String name;
-    
-    public Group(int id, String name) {
-        this.id = id;
-        this.name = name;
-    }
-    
-    public int getId() { return id; }
-    public String getName() { return name; }
-    
-    @Override
-    public boolean equals(Object obj) {
-        return this == obj || (obj instanceof Group group && id == group.id);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-}
-
-class Teacher {
-    private int id;
-    private String lastName;
-    private String firstName;
-    
-    public Teacher(int id, String lastName, String firstName) {
-        this.id = id;
-        this.lastName = lastName;
-        this.firstName = firstName;
-    }
-    
-    public int getId() { return id; }
-    public String getLastName() { return lastName; }
-    public String getFirstName() { return firstName; }
-}
-
-class Student {
-    private int id;
-    private String lastName;
-    private String firstName;
-    private Instant entryDate;
-    private List<GroupHistory> groupHistory;
-    
-    public Student(int id, String lastName, String firstName, Instant entryDate) {
-        this.id = id;
-        this.lastName = lastName;
-        this.firstName = firstName;
-        this.entryDate = entryDate;
-        this.groupHistory = new ArrayList<>();
-    }
-    
-    public int getId() { return id; }
-    public String getLastName() { return lastName; }
-    public String getFirstName() { return firstName; }
-    public Instant getEntryDate() { return entryDate; }
-    public List<GroupHistory> getGroupHistory() { return groupHistory; }
-    
-    public void addGroupHistory(Group group, Instant joinDate) {
-        groupHistory.add(new GroupHistory(group, joinDate));
-    }
-    
-    @Override
-    public boolean equals(Object obj) {
-        return this == obj || (obj instanceof Student student && id == student.id);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-    
-    public static class GroupHistory {
-        private Group group;
-        private Instant joinDate;
-        
-        public GroupHistory(Group group, Instant joinDate) {
-            this.group = group;
-            this.joinDate = joinDate;
-        }
-        
-        public Group getGroup() { return group; }
-        public Instant getJoinDate() { return joinDate; }
-    }
-}
-
-class Fee {
-    private int id;
-    private String label;
-    private double amountToPay;
-    private Instant deadline;
-    private Student student;
-    private List<Payment> payments;
-    
-    public Fee(int id, String label, double amountToPay, Instant deadline, Student student) {
-        this.id = id;
-        this.label = label;
-        this.amountToPay = amountToPay;
-        this.deadline = deadline;
-        this.student = student;
-        this.payments = new ArrayList<>();
-    }
-    
-    public int getId() { return id; }
-    public String getLabel() { return label; }
-    public double getAmountToPay() { return amountToPay; }
-    public Instant getDeadline() { return deadline; }
-    public Student getStudent() { return student; }
-    public List<Payment> getPayments() { return payments; }
-    
-    public void addPayment(Payment payment) {
-        payments.add(payment);
-    }
-    
-    public double getTotalPaidAtTime(Instant time) {
-        return payments.stream()
-                .filter(payment -> !payment.getPaymentDateTime().isAfter(time))
-                .mapToDouble(Payment::getAmount)
-                .sum();
-    }
-    
-    public FeeStatus getStatusAtTime(Instant time) {
-        double totalPaid = getTotalPaidAtTime(time);
-        
-        if (totalPaid == 0) return FeeStatus.NULL;
-        if (totalPaid > amountToPay) return FeeStatus.OVERPAID;
-        if (totalPaid == amountToPay) return FeeStatus.PAID;
-        
-        return time.isAfter(deadline) ? FeeStatus.LATE : FeeStatus.IN_PROGRESS;
-    }
-    
-    @Override
-    public boolean equals(Object obj) {
-        return this == obj || (obj instanceof Fee fee && id == fee.id);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-}
-
-class Statistics {
-    
-    public static List<Fee> getLateFees(List<Fee> fees, Instant time) {
-        return fees.stream()
-                .filter(fee -> fee.getStatusAtTime(time) == FeeStatus.LATE)
-                .collect(Collectors.toList());
-    }
-    
-    public static double getTotalMissingFees(List<Fee> fees, Instant time) {
-        return fees.stream()
-                .filter(fee -> fee.getStatusAtTime(time) == FeeStatus.LATE)
-                .mapToDouble(fee -> fee.getAmountToPay() - fee.getTotalPaidAtTime(time))
-                .sum();
-    }
-    
-    public static double getTotalPaidByStudent(Student student, List<Fee> fees, Instant time) {
-        return fees.stream()
-                .filter(fee -> fee.getStudent().equals(student))
-                .mapToDouble(fee -> fee.getTotalPaidAtTime(time))
-                .sum();
-    }
-}
-
-public class UniversityFeeManagement {
+public class SimpleUniversityFeeTest {
     
     public static void main(String[] args) {
+       
         Instant now = Instant.now();
-        Instant pastDeadline = now.minusSeconds(86400);
-        Instant futureDeadline = now.plusSeconds(86400);
+        Instant pastDeadline = now.minusSeconds(86400); 
+        Instant futureDeadline = now.plusSeconds(86400); 
         
-        Student student1 = new Student(1, "Dupont", "Jean", now.minusSeconds(31536000));
-        Student student2 = new Student(2, "Martin", "Marie", now.minusSeconds(15768000));
         
-        Fee fee1 = new Fee(1, "Frais de scolarité S1", 1000.0, pastDeadline, student1);
-        Fee fee2 = new Fee(2, "Frais de scolarité S2", 1200.0, futureDeadline, student1);
-        Fee fee3 = new Fee(3, "Frais de bibliothèque", 50.0, pastDeadline, student2);
+        Student student = new Student(1, "Dupont", "Jean", now.minusSeconds(31536000));
         
-        fee1.addPayment(new CashPayment(1, 500.0, now.minusSeconds(43200)));
-        fee2.addPayment(new CreditCardPayment(2, 300.0, now.minusSeconds(21600), "1234-5678-9012-3456"));
-        fee3.addPayment(new BankTransferPayment(3, 60.0, now.minusSeconds(43200), "FR76 1234 5678 9012 3456 7890 123"));
-        
-        List<Fee> allFees = Arrays.asList(fee1, fee2, fee3);
      
-        System.out.println("Frais 1: " + fee1.getStatusAtTime(now));
-        System.out.println("Frais 2: " + fee2.getStatusAtTime(now));
-        System.out.println("Frais 3: " + fee3.getStatusAtTime(now));
+        Fee lateFee = new Fee(1, "Frais en retard", 500.0, pastDeadline, student);
+        Fee paidFee = new Fee(2, "Frais payé", 300.0, pastDeadline, student);
+        Fee futureFee = new Fee(3, "Frais futur", 400.0, futureDeadline, student);
         
-        System.out.println("Frais en retard: " + Statistics.getLateFees(allFees, now).size());
-        System.out.println("Total manquant: " + Statistics.getTotalMissingFees(allFees, now));
-        System.out.println("Total payé par étudiant 1: " + Statistics.getTotalPaidByStudent(student1, allFees, now));
-        System.out.println("Total payé par étudiant 2: " + Statistics.getTotalPaidByStudent(student2, allFees, now));
+       
+        lateFee.addPayment(new CashPayment(1, 200.0, now.minusSeconds(43200))); 
+        paidFee.addPayment(new CashPayment(2, 300.0, now.minusSeconds(43200))); 
+        
+        List<Fee> fees = Arrays.asList(lateFee, paidFee, futureFee);
+        
+     
+        System.out.println("Frais en retard: " + lateFee.getStatusAtTime(now));
+        System.out.println("Frais payé: " + paidFee.getStatusAtTime(now));
+        System.out.println("Frais futur (non payé): " + futureFee.getStatusAtTime(now));
+        
+        
+        System.out.println("Frais en retard: " + Statistics.getLateFees(fees, now).size() + " trouvé(s)");
+        System.out.println("Total manquant: " + Statistics.getTotalMissingFees(fees, now) + " €");
+        System.out.println("Total payé par étudiant: " + Statistics.getTotalPaidByStudent(student, fees, now) + " €");
+        
+
+        Fee overpaidFee = new Fee(4, "Frais surpayé", 100.0, pastDeadline, student);
+        overpaidFee.addPayment(new CashPayment(3, 150.0, now.minusSeconds(43200)));
+        System.out.println("Frais surpayé: " + overpaidFee.getStatusAtTime(now));
     }
 }
